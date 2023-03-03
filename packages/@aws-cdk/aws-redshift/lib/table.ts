@@ -1,4 +1,6 @@
+/* eslint-disable import/no-extraneous-dependencies */
 import * as cdk from '@aws-cdk/core';
+import { REDSHIFT_COLUMN_ID } from '@aws-cdk/cx-api';
 import { Construct, IConstruct } from 'constructs';
 import { ICluster } from './cluster';
 import { DatabaseOptions } from './database-options';
@@ -55,7 +57,18 @@ export enum TableAction {
  */
 export interface Column {
   /**
-   * The name of the column.
+   * The unique identifier of the column.
+   *
+   * This is not the name of the column, and renaming this identifier will cause a new column to be created and the old column to be dropped.
+   *
+   * **NOTE** - This field will be set, however, only by setting the `@aws-cdk/aws-redshift:columnId` feature flag will this field be used.
+   *
+   * @default - the column name is used as the identifier
+   */
+  readonly id?: string;
+
+  /**
+   * The name of the column. This will appear on Amazon Redshift.
    */
   readonly name: string;
 
@@ -115,6 +128,13 @@ export interface TableProps extends DatabaseOptions {
    * @default cdk.RemovalPolicy.Retain
    */
   readonly removalPolicy?: cdk.RemovalPolicy;
+
+  /**
+     * A comment to attach to the table.
+     *
+     * @default - no comment
+     */
+  readonly tableComment?: string;
 }
 
 /**
@@ -208,6 +228,7 @@ export class Table extends TableBase {
   constructor(scope: Construct, id: string, props: TableProps) {
     super(scope, id);
 
+    this.addColumnIds(props.tableColumns);
     this.validateDistKeyColumns(props.tableColumns);
     if (props.distStyle) {
       this.validateDistStyle(props.distStyle, props.tableColumns);
@@ -219,6 +240,8 @@ export class Table extends TableBase {
     this.tableColumns = props.tableColumns;
     this.cluster = props.cluster;
     this.databaseName = props.databaseName;
+
+    const useColumnIds = !!cdk.FeatureFlags.of(this).isEnabled(REDSHIFT_COLUMN_ID);
 
     this.resource = new DatabaseQuery<TableHandlerProps>(this, 'Resource', {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
@@ -232,6 +255,8 @@ export class Table extends TableBase {
         tableColumns: this.tableColumns,
         distStyle: props.distStyle,
         sortStyle: props.sortStyle ?? this.getDefaultSortStyle(props.tableColumns),
+        tableComment: props.tableComment,
+        useColumnIds,
       },
     });
 
@@ -286,6 +311,18 @@ export class Table extends TableBase {
   private getDefaultSortStyle(columns: Column[]): TableSortStyle {
     const sortKeyColumns = getSortKeyColumns(columns);
     return (sortKeyColumns.length === 0) ? TableSortStyle.AUTO : TableSortStyle.COMPOUND;
+  }
+
+  private addColumnIds(columns: Column[]): void {
+    const columnIds = new Set<string>();
+    for (const column of columns) {
+      if (column.id) {
+        if (columnIds.has(column.id)) {
+          throw new Error(`Column id '${column.id}' is not unique.`);
+        }
+        columnIds.add(column.id);
+      }
+    }
   }
 }
 
