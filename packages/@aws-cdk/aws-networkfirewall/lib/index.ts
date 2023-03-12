@@ -3,6 +3,7 @@ export * from './policy';
 export * from './rule-group';
 export * from './rule';
 export * from './actions';
+export * from './logging';
 
 // AWS::NetworkFirewall CloudFormation Resources:
 export * from './networkfirewall.generated';

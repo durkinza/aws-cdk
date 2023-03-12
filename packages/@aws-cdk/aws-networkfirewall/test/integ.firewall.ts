@@ -1,4 +1,7 @@
 import * as ec2 from '@aws-cdk/aws-ec2';
+// import * as kinesis from '@aws-cdk/aws-kinesis';
+// import * as logs from '@aws-cdk/aws-logs';
+import * as s3 from '@aws-cdk/aws-s3';
 import * as cdk from '@aws-cdk/core';
 import { IntegTest } from '@aws-cdk/integ-tests';
 import * as NetFW from '../lib';
@@ -7,8 +10,18 @@ class TestStack extends cdk.Stack {
   constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
     const vpc = new ec2.Vpc(this, 'MyTestVpc', {
-      cidr: '10.0.0.0/16',
+      ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/16'),
     });
+
+    // Setting up logging locations
+    // const cloudWatchLogGroup = new logs.LogGroup(this, 'MyFirewallLogGroup');
+
+    const s3LoggingBucket = new s3.Bucket(this, 'MyFirewallLogBucket');
+
+    // const kinesisStream = new kinesis.Stream(this, 'MyFirewallStream', {
+    //   streamName: 'my-test-stream',
+    // });
+
 
     // Setup Stateful 5Tuple rule & Group
 
@@ -125,10 +138,31 @@ class TestStack extends cdk.Stack {
       ],
     });
 
+
     new NetFW.Firewall(this, 'networkFirewall', {
       firewallName: 'my-network-firewall',
       vpc: vpc,
       policy: policy,
+      // loggingCloudWatchLogGroups: [{
+      //   logGroup: cloudWatchLogGroup.logGroupName,
+      //   logType: NetFW.LogType.FLOW,
+      // }],
+      loggingS3Buckets: [
+        {
+          bucketName: s3LoggingBucket.bucketName,
+          logType: NetFW.LogType.ALERT,
+          prefix: 'alerts',
+        },
+        {
+          bucketName: s3LoggingBucket.bucketName,
+          logType: NetFW.LogType.FLOW,
+          prefix: 'flow',
+        },
+      ],
+      // loggingKinesisDataStreams: [{
+      //   deliveryStream: kinesisStream.streamName,
+      //   logType: NetFW.LogType.ALERT,
+      // }],
     });
   }
 }
